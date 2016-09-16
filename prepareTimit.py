@@ -10,7 +10,35 @@ import kaldi_io
 import numpy as np
 from utils import data_lists_to_batches
 
-def load_batched_timit(batch_size, batch_count, debug = 0):
+'''
+Function which generates batch data using an ark reader
+and a phone-map dictionary.
+@param reader: an ark reader instance
+@param phone_dict: a phoneme dictionary with a key for every phoneme in the target data.
+'''
+def setUpBatchLists(reader, phone_dict, fold_dict, batch_count):
+    
+    data = reader.scp_data
+    batch_size = int(len(data)/batch_count)
+    
+    input_list = []
+    target_list = []
+    for i in range(0,batch_count*batch_size):
+        #get an utterance
+        utt = reader.read_next_utt()
+        input_list.append(utt[1].transpose())
+        
+        #get the corrensponding transcription.
+        transcription = phone_dict[utt[0]]
+        #relace trancription strings with codes.
+        target = []
+        for phone in transcription:
+            target.append(fold_dict[phone])
+        target_list.append(np.array(target, dtype = np.uint8))
+
+    return input_list, target_list, batch_size
+
+def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug = 0):
 
     fbank_Path = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/fbank"
     #open the training kaldi arks fbank files.
@@ -38,7 +66,7 @@ def load_batched_timit(batch_size, batch_count, debug = 0):
     train_phone_lines = train_phone_file.read().splitlines()
 
     #for the dev set.
-    dev_phone_path  = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/train/text"
+    dev_phone_path  = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/dev/text"
     dev_phone_file  = open(dev_phone_path)
     dev_phone_lines = dev_phone_file.read().splitlines()
 
@@ -118,29 +146,33 @@ def load_batched_timit(batch_size, batch_count, debug = 0):
         print(len(vocabDict))
 
 
-    #read an utterance.
-    utt = train_reader.read_next_utt()
-    # get corresponding output.
-    phones = train_phone_dict[utt[0]]
+    maxTimeStepsTimit = 777
+    #set up the training data
+    input_list_train, target_list_train, batch_size = setUpBatchLists(train_reader, train_phone_dict,
+                                                            fold_dict, batch_count)
 
-    #set up the input Lists
-    
-    input_list = []
-    target_list = []
-    for i in range(0,batch_count*batch_size):
-        #get an utterance
-        utt = train_reader.read_next_utt()
-        input_list.append(utt[1].transpose())
+    batched_data, max_time_steps = data_lists_to_batches(input_list_train, target_list_train,
+                                                        batch_size , maxTimeStepsTimit)
         
-        #get the corrensponding transcription.
-        transcription = train_phone_dict[utt[0]]
-        #relace trancription strings with codes.
-        target = []
-        for phone in transcription:
-            target.append(fold_dict[phone])
-        target_list.append(np.array(target, dtype = np.uint8))
+    training_data = (batched_data, max_time_steps, batch_size*batch_count, batch_size)
+    
+    #set up the validation data
+    input_list_val, target_list_val, batch_size_val = setUpBatchLists(dev_reader, dev_phone_dict,
+                                                            fold_dict, batch_count_val)
+    batched_data_val, max_time_steps_val = data_lists_to_batches(input_list_val, target_list_val,
+                                                                batch_size_val, maxTimeStepsTimit)
+    validation_data = (batched_data_val, max_time_steps_val, batch_size_val*batch_count, batch_size_val)
 
-    batched_data, max_time_steps = data_lists_to_batches(input_list, target_list, batch_size)
+    #set up test data
+    input_list_test, target_list_test, batch_size_test = setUpBatchLists(test_reader, test_phone_dict,
+                                                            fold_dict, batch_count_test)
+    batched_data_test, max_time_steps_test = data_lists_to_batches(input_list_test, target_list_test,
+                                                                   batch_size_test, maxTimeStepsTimit)
+    test_data = (batched_data_val, max_time_steps_val, batch_size_val*batch_count, batch_size_val)
 
-    return batched_data, max_time_steps, batch_size*batch_count
+    return training_data, validation_data, test_data
 
+
+        
+        
+        

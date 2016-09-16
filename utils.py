@@ -30,7 +30,7 @@ def test_edit_distance():
         dist = session.run([editDist], feed_dict=feedDict)
         print(dist)
 
-def data_lists_to_batches(inputList, targetList, batchSize):
+def data_lists_to_batches(inputList, targetList, batchSize, maxSteps = None):
     '''Takes a list of input matrices and a list of target arrays and returns
        a list of batches, with each batch being a 3-element tuple of inputs,
        targets, and sequence lengths.
@@ -45,10 +45,12 @@ def data_lists_to_batches(inputList, targetList, batchSize):
     
     assert len(inputList) == len(targetList)
     nFeatures = inputList[0].shape[0]
-    maxSteps = 0
-    for inp in inputList:
-        maxSteps = max(maxSteps, inp.shape[1])
-        
+    
+    if maxSteps == None:
+        maxSteps = 0
+        for inp in inputList:
+            maxSteps = max(maxSteps, inp.shape[1])
+            
     randIxs = np.random.permutation(len(inputList))
     start, end = (0, batchSize)
     dataBatches = []
