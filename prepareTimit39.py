@@ -10,13 +10,17 @@ import kaldi_io
 import numpy as np
 from utils import data_lists_to_batches
 
-'''
-Function which generates batch data using an ark reader
-and a phone-map dictionary.
-@param reader: an ark reader instance
-@param phone_dict: a phoneme dictionary with a key for every phoneme in the target data.
-'''
-def setUpBatchLists(reader, phone_dict, fold_dict, batch_count, debug=False):
+
+def targetCodesToPhones(target,phone_map):
+    code_map = {code: phone for phone, code in phone_map.items()}
+    coded_targets = target_list_train[0]
+    target_phones = []
+    for code in coded_targets:
+        target_phones.append(code_map[code])
+
+    return target_phones
+
+def setUpBatchLists(reader, phone_dict, phone_map, batch_count, debug=False):
     
     data = reader.scp_data
     batch_size = int(len(data)/batch_count)
@@ -33,21 +37,17 @@ def setUpBatchLists(reader, phone_dict, fold_dict, batch_count, debug=False):
         #relace trancription strings with codes.
         target = []
         for phone in transcription:
-            target.append(fold_dict[phone])
+            target.append(phone_map[phone])
         target_list.append(np.array(target, dtype = np.uint8))
  
-
+ 
+    #from IPython.core.debugger import Tracer
+    #Tracer()()
+ 
     return input_list, target_list, batch_size
-    
-'''
-Transform lists with phoneme numbers back to phoneme sequence strings
-for debugging purposes.
-'''
-def batchArrayToPhonemeString(fold_dict):
-    pass
 
 
-def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug = False):
+def load_batched_timit39(batch_count, batch_count_val, batch_count_test, debug = False):
 
     fbank_Path = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/fbank"
     #open the training kaldi arks fbank files.
@@ -70,17 +70,17 @@ def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug = F
 
     #read the phoneme-targets.
     #for the training set.
-    train_phone_path  = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/train/text"
+    train_phone_path  = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/train/train39.text"
     train_phone_file  = open(train_phone_path)
     train_phone_lines = train_phone_file.read().splitlines()
 
     #for the dev set.
-    dev_phone_path  = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/dev/text"
+    dev_phone_path  = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/dev/dev39.text"
     dev_phone_file  = open(dev_phone_path)
     dev_phone_lines = dev_phone_file.read().splitlines()
 
     #for the test set.
-    test_phone_path = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/test/text"
+    test_phone_path = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/test/test39.text"
     test_phone_file = open(test_phone_path)
     test_phone_lines = test_phone_file.read().splitlines()
 
@@ -104,8 +104,6 @@ def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug = F
         test_phone_dict.update({tmp[0]: tmp[1:]})
 
 
-
-
     #check the vocabulary.
     vocabDict = {}
     for i in range(0,len(test_phone_lines)):
@@ -118,75 +116,53 @@ def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug = F
                     print('adding: ' + str({wrd: 0}))
                 vocabDict.update({wrd: 0})
 
-    #create a dict with alphabetically sorted keys and flod some phonemes.
-    #see lee Hon page 2:
-    #Among these 48 phones, there are seven groups where within-group confusions are not counted:
-    # {sil, cl, vcl, epi}, {el, l}, {en, n}, {sh, zh}, {ao, aa}, {ih, ix), {ah, ax}.
-    # Thus, there are effectively 39 phones that are in separate categories.
-    vals = list(vocabDict.keys());
-    vals.sort();
-    fold_dict = {}
-
-    fold1 = ['sil','cl','vcl','epi']
-    fold2 = ['el','l']
-    fold3 = ['en','n']
-    fold4 = ['sh','zh']
-    fold5 = ['ao','aa']
-    fold6 = ['ih','ix']
-    fold7 = ['ah','ax']
-    folds = [fold1, fold2, fold3, fold4, fold5, fold6, fold7]
-    keyId = 7 
-    for key in vals:
-        foldedKey = False
-        for foldId,fold in enumerate(folds):
-            if key in fold:
-                fold_dict.update({key: foldId})
-                foldedKey = True
-        if foldedKey == False:
-            fold_dict.update({key: keyId})
-            keyId = keyId + 1
-
-
-    #if debug:
+    if False:
         #plot the result.
-        #X = np.arange(len(vocabDict))
-        #plt.bar(X, vocabDict.values(), align='center', width=0.5)
-        #plt.xticks(X, vocabDict.keys())
-        #ymax = max(vocabDict.values()) + 1
-        #plt.ylim(0, ymax)
-        #plt.show()
+        X = np.arange(len(vocabDict))
+        plt.bar(X, vocabDict.values(), align='center', width=0.5)
+        plt.xticks(X, vocabDict.keys())
+        ymax = max(vocabDict.values()) + 1
+        plt.ylim(0, ymax)
+        plt.show()
 
-        #print(len(vocabDict))
+    print(len(vocabDict))
+
+    phones = list(vocabDict.keys())
+    phones.sort()
+
+    phone_map = {}
+    for no,phoneme in enumerate(phones):
+        phone_map.update({phoneme: no})
 
 
     maxTimeStepsTimit = 777
     #set up the training data
-    input_list_train, target_list_train, batch_size = setUpBatchLists(train_reader, train_phone_dict,
-                                                            fold_dict, batch_count)
+    input_list_train, target_list_train, batch_size = setUpBatchLists(train_reader, 
+                                train_phone_dict, phone_map, batch_count)
 
     batched_data, max_time_steps = data_lists_to_batches(input_list_train, target_list_train,
-                                                        batch_size , maxTimeStepsTimit)
-        
+                                                    batch_size , maxTimeStepsTimit)
+
     training_data = (batched_data, max_time_steps, batch_size*batch_count, batch_size)
-    
+
     #set up the validation data
     input_list_val, target_list_val, batch_size_val = setUpBatchLists(dev_reader, dev_phone_dict,
-                                                            fold_dict, batch_count_val)
+                                                        phone_map, batch_count_val)
     batched_data_val, max_time_steps_val = data_lists_to_batches(input_list_val, target_list_val,
-                                                                batch_size_val, maxTimeStepsTimit)
+                                                            batch_size_val, maxTimeStepsTimit)
     validation_data = (batched_data_val, max_time_steps_val, batch_size_val*batch_count, batch_size_val)
 
     #set up test data
     input_list_test, target_list_test, batch_size_test = setUpBatchLists(test_reader, test_phone_dict,
-                                                            fold_dict, batch_count_test)
+                                                        phone_map, batch_count_test)
     batched_data_test, max_time_steps_test = data_lists_to_batches(input_list_test, target_list_test,
-                                                                   batch_size_test, maxTimeStepsTimit)
+                                                               batch_size_test, maxTimeStepsTimit)
     test_data = (batched_data_test, max_time_steps_test, batch_size_test*batch_count, batch_size_test)
 
-    
+
     if debug == False:
         return training_data, validation_data, test_data
     else:
-        dense_targets = (target_list_train, target_list_val,
-                target_list_test)
-        return training_data, validation_data, test_data, dense_targets
+        target_lists = (target_list_train, target_list_val,
+            target_list_test)
+    return training_data, validation_data, test_data, target_lists

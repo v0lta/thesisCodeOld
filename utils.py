@@ -5,30 +5,19 @@ def target_list_to_sparse_tensor(targetList):
     '''make tensorflow SparseTensor from list of targets, with each element
        in the list being a list or array with the values of the target sequence
        (e.g., the integer values of a character map for an ASR target string)
-       See https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/ctc/ctc_loss_op_test.py
-       for example of SparseTensor format'''
+    '''
     indices = []
     vals = []
+    lengths = []
     for tI, target in enumerate(targetList):
         for seqI, val in enumerate(target):
-            indices.append([tI, seqI])
-            vals.append(val)
-    shape = [len(targetList), np.asarray(indices).max(0)[1]+1]
+            lengths.append(len(target))
+            if val != 0:
+                indices.append([tI, seqI])
+                vals.append(val)
+    shape = [len(targetList), np.max(lengths)]
+    
     return (np.array(indices), np.array(vals), np.array(shape))
-
-def test_edit_distance():
-    graph = tf.Graph()
-    with graph.as_default():
-        truth = tf.sparse_placeholder(tf.int32)
-        hyp = tf.sparse_placeholder(tf.int32)
-        editDist = tf.edit_distance(hyp, truth, normalize=False)
-
-    with tf.Session(graph=graph) as session:
-        truthTest = sparse_tensor_feed([[0,1,2], [0,1,2,3,4]])
-        hypTest = sparse_tensor_feed([[3,4,5], [0,1,2,2]])
-        feedDict = {truth: truthTest, hyp: hypTest}
-        dist = session.run([editDist], feed_dict=feedDict)
-        print(dist)
 
 def data_lists_to_batches(inputList, targetList, batchSize, maxSteps = None):
     '''Takes a list of input matrices and a list of target arrays and returns
@@ -50,46 +39,33 @@ def data_lists_to_batches(inputList, targetList, batchSize, maxSteps = None):
         maxSteps = 0
         for inp in inputList:
             maxSteps = max(maxSteps, inp.shape[1])
-            
-    randIxs = np.random.permutation(len(inputList))
+    
+    #randIxs = np.random.permutation(len(inputList)) #randomly mix the batches.        
+    batchIxs = np.asarray(range(len(inputList))) #do not randomly permutate.
     start, end = (0, batchSize)
     dataBatches = []
 
     while end <= len(inputList):
         batchSeqLengths = np.zeros(batchSize)
-        for batchI, origI in enumerate(randIxs[start:end]):
+        for batchI, origI in enumerate(batchIxs[start:end]):
             batchSeqLengths[batchI] = inputList[origI].shape[-1]
         batchInputs = np.zeros((maxSteps, batchSize, nFeatures))
         batchTargetList = []
-        for batchI, origI in enumerate(randIxs[start:end]):
+        for batchI, origI in enumerate(batchIxs[start:end]):
             padSecs = maxSteps - inputList[origI].shape[1]
-            batchInputs[:,batchI,:] = np.pad(inputList[origI].T, ((0,padSecs),(0,0)),
+            batchInputs[:,batchI,:] = np.pad(normalizeInput(inputList[origI].T), ((0,padSecs),(0,0)),
                                              'constant', constant_values=0)
             batchTargetList.append(targetList[origI])
         dataBatches.append((batchInputs, target_list_to_sparse_tensor(batchTargetList),
                           batchSeqLengths))
         start += batchSize
         end += batchSize
-
+        
     return (dataBatches, maxSteps)
-
-def load_batched_data(specPath, targetPath, batchSize):
-    import os
-    '''returns 3-element tuple: batched data (list), max # of time steps (int), and
-       total number of samples (int)'''
-    return data_lists_to_batches([np.load(os.path.join(specPath, fn)) for fn in os.listdir(specPath)],
-                                 [np.load(os.path.join(targetPath, fn)) for fn in os.listdir(targetPath)],
-                                 batchSize) + \
-            (len(os.listdir(specPath)),)
             
-def charCodesToString(targetList):
-    ''' Convert char codes to string to see what data we're looking at.'''
-    string_list = []
-    for target in targetList:
-        string_sub_list = []
-        for chrNo in target:
-            string_sub_list.append(chr(chrNo + 96))
-        string_list.append(string_sub_list)
+def normalizeInput(inputArray):
+    zeroMean = inputArray - np.mean(inputArray)
+    stdOneZeroMean = zeroMean/np.std(zeroMean) 
+    return stdOneZeroMean
     
-    #print(string_list)
-    return string_list
+
