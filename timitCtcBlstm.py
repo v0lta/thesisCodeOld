@@ -23,6 +23,7 @@ from prepareTimit39 import load_batched_timit39
 ####Learning Parameters
 learningRate = 0.0001
 momentum = 0.9
+omega = 0.1 #weight regularization term.
 #learningRate = 0.0001       #too low?
 #momentum = 0.6              #play with this.
 nEpochs = 20
@@ -57,9 +58,9 @@ def createDict(batchedData):
     return feedDict, batchSeqLengths
 
 def blstm(inputList, weightsBLSTM, biasesBLSTM):
-    initializer = tf.random_normal_initializer(0.0,0.1)
+    #initializer = tf.random_normal_initializer(0.0,0.1)
     #initializer = tf.random_normal_initializer(0.0,np.sqrt(2.0 / (2*nHidden)))
-    #initializer = None
+    initializer = None
     forwardH1 = rnn_cell.LSTMCell(nHidden, use_peepholes = True, state_is_tuple = True,
                                     initializer = initializer)
     backwardH1 = rnn_cell.LSTMCell(nHidden, use_peepholes = True, state_is_tuple = True,
@@ -95,10 +96,10 @@ with graph.as_default():
     seqLengths = tf.placeholder(tf.int32, shape=None)
     
     #### Weights & biases
-    #weightsBLSTM = tf.Variable(tf.random_normal([nHidden*2, nClasses], mean=0.0,
-    #                        stddev=0.1, dtype=tf.float32, seed=None, name=None))
-    weightsBLSTM = tf.Variable(tf.truncated_normal([nHidden*2, nClasses],
-                                                   stddev=np.sqrt(2.0 / (2*nHidden))))
+    weightsBLSTM = tf.Variable(tf.random_normal([nHidden*2, nClasses], mean=0.0,
+                            stddev=0.1, dtype=tf.float32, seed=None, name=None))
+    #weightsBLSTM = tf.Variable(tf.truncated_normal([nHidden*2, nClasses],
+    #                                               stddev=np.sqrt(2.0 / (2*nHidden))))
     biasesBLSTM = tf.Variable(tf.zeros([nClasses]))
 
     #### Network
