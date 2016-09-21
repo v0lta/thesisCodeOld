@@ -198,19 +198,20 @@ with tf.Session(graph=graph) as session:
         epoch_error_lst_val.append(ver)
         print("validation errors", epoch_error_lst_val )
         
-        if epoch == 5:
-            restarts += 1
-            if min(epoch_error_lst_val) > 0.95:
-                print("resetting weights")
+        if epoch == 6:
+            if np.mean(epoch_error_lst_val) > 0.98:
+                print("reinitializing weights")
+                print("no resets: ", restarts)
                 tf.initialize_all_variables().run()
                 epoch_error_lst_val = []
                 epoch_error_lst = []
+                restarts += 1
                 
-        
+        #stop if in the last 50 epochs no progress has been made.
         if epoch > 60:
             min_last_50 = min(epoch_error_lst_val[(epoch-50):epoch])
             min_since_start = min(epoch_error_lst_val[0:(epoch-50)])
-            if min_last_50 > (min_since_start - 0.05):
+            if min_last_50 > (min_since_start):
                 continue_training = False
                 print("stopping the training.")
             
