@@ -16,20 +16,23 @@ def target_list_to_sparse_tensor(targetList):
                 indices.append([tI, seqI])
                 vals.append(val)
     shape = [len(targetList), np.max(lengths)]
-    
+
     return (np.array(indices), np.array(vals), np.array(shape))
 
-def data_lists_to_batches(inputList, targetList, batchSize, maxSteps = None):
+def data_lists_to_batches(inputList, targetList, batchSize, maxSteps=None):
     '''Takes a list of input matrices and a list of target arrays and returns
        a list of batches, with each batch being a 3-element tuple of inputs,
        targets, and sequence lengths.
        inputList: list of 2-d numpy arrays with dimensions nFeatures x timesteps
        targetList: list of 1-d arrays or lists of ints
        batchSize: int indicating number of inputs/targets per batch
-       returns: dataBatches: list of batch data tuples, where each batch tuple (inputs, targets, seqLengths) consists of
-                    inputs = 3-d array w/ shape nTimeSteps x batchSize x nFeatures
+       returns: dataBatches: list of batch data tuples,
+                where each batch tuple (inputs, targets, seqLengths)
+                consists of:
+                    inputs  = 3-d array w/ shape nTimeSteps x batchSize x nFeatures
                     targets = tuple required as input for SparseTensor
-                    seqLengths = 1-d array with int number of timesteps for each sample in batch
+                    seqLengths = 1-d array with int number of timesteps for
+                                 each sample in batch
                 maxSteps: maximum number of time steps across all samples'''
     
     assert len(inputList) == len(targetList)
@@ -40,7 +43,7 @@ def data_lists_to_batches(inputList, targetList, batchSize, maxSteps = None):
         for inp in inputList:
             maxSteps = max(maxSteps, inp.shape[1])
     
-    #randIxs = np.random.permutation(len(inputList)) #randomly mix the batches.        
+    #randIxs = np.random.permutation(len(inputList)) #randomly mix the batches.
     batchIxs = np.asarray(range(len(inputList))) #do not randomly permutate.
     start, end = (0, batchSize)
     dataBatches = []
@@ -53,7 +56,8 @@ def data_lists_to_batches(inputList, targetList, batchSize, maxSteps = None):
         batchTargetList = []
         for batchI, origI in enumerate(batchIxs[start:end]):
             padSecs = maxSteps - inputList[origI].shape[1]
-            batchInputs[:,batchI,:] = np.pad(normalizeInput(inputList[origI].T), ((0,padSecs),(0,0)),
+            batchInputs[:,batchI,:] = np.pad(normalizeInput(inputList[origI].T),
+                                            ((0,padSecs),(0,0)),
                                              'constant', constant_values=0)
             batchTargetList.append(targetList[origI])
         dataBatches.append((batchInputs, target_list_to_sparse_tensor(batchTargetList),
@@ -65,7 +69,6 @@ def data_lists_to_batches(inputList, targetList, batchSize, maxSteps = None):
             
 def normalizeInput(inputArray):
     zeroMean = inputArray - np.mean(inputArray)
-    stdOneZeroMean = zeroMean/np.std(zeroMean) 
+    stdOneZeroMean = zeroMean/np.std(zeroMean)
     return stdOneZeroMean
     
-

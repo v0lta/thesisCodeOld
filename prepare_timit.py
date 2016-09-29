@@ -10,68 +10,66 @@ import kaldi_io
 import numpy as np
 from utils import data_lists_to_batches
 
-'''
-Function which generates batch data using an ark reader
-and a phone-map dictionary.
-@param reader: an ark reader instance
-@param phone_dict: a phoneme dictionary with a key for every phoneme in the target data.
-'''
+
 def setUpBatchLists(reader, phone_dict, fold_dict, batch_count, debug=False):
-    
+    '''
+    Function which generates batch data using an ark reader
+    and a phone-map dictionary.
+    @param reader: an ark reader instance
+    @param phone_dict: a phoneme dictionary with a key for
+                       every phoneme in the target data.
+    '''
+
     data = reader.scp_data
     batch_size = int(len(data)/batch_count)
-    
+
     input_list = []
     target_list = []
-    for i in range(0,batch_count*batch_size):
+    for _ in range(0, batch_count*batch_size):
         #get an utterance
         utt = reader.read_next_utt()
         input_list.append(utt[1].transpose())
-        
+
         #get the corrensponding transcription.
         transcription = phone_dict[utt[0]]
         #relace trancription strings with codes.
         target = []
         for phone in transcription:
             target.append(fold_dict[phone])
-        target_list.append(np.array(target, dtype = np.uint8))
- 
+        target_list.append(np.array(target, dtype=np.uint8))
+
 
     return input_list, target_list, batch_size
-    
-'''
-Transform lists with phoneme numbers back to phoneme sequence strings
-for debugging purposes.
-'''
-def batchArrayToPhonemeString(fold_dict):
-    pass
 
 
-def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug = False):
+def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug=False):
 
     fbank_Path = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/fbank"
     #open the training kaldi arks fbank files.
-    train_file = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/fbank" + "/" + "raw_fbank_train.1.scp"
+    train_file = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/fbank" \
+                  + "/" + "raw_fbank_train.1.scp"
     train_reader = kaldi_io.KaldiReadIn(train_file)
     train_data = train_reader.scp_data
     print("Training Samples: " + str(len(train_data)))
 
     #open the dev fbanks
-    dev_file = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/fbank" + "/" + "raw_fbank_dev.1.scp"
+    dev_file = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/fbank" \
+                + "/" + "raw_fbank_dev.1.scp"
     dev_reader = kaldi_io.KaldiReadIn(dev_file)
     dev_data = dev_reader.scp_data
     print("Dev Samples: " + str(len(dev_data)))
 
     #open the test fbanks
-    test_file = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/fbank" + "/" + "raw_fbank_test.1.scp"
+    test_file = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/fbank"  \
+                + "/" + "raw_fbank_test.1.scp"
     test_reader = kaldi_io.KaldiReadIn(test_file)
     test_data = test_reader.scp_data
     print("Test Samples: " + str(len(test_data)))
 
     #read the phoneme-targets.
     #for the training set.
-    train_phone_path  = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/train/text"
-    train_phone_file  = open(train_phone_path)
+    train_phone_path = "/esat/spchtemp/scratch/moritz/dataSets/timit/s5/data/train/text"
+    train_phone_file = open(train_phone_path)
     train_phone_lines = train_phone_file.read().splitlines()
 
     #for the dev set.
@@ -123,8 +121,8 @@ def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug = F
     #Among these 48 phones, there are seven groups where within-group confusions are not counted:
     # {sil, cl, vcl, epi}, {el, l}, {en, n}, {sh, zh}, {ao, aa}, {ih, ix), {ah, ax}.
     # Thus, there are effectively 39 phones that are in separate categories.
-    vals = list(vocabDict.keys());
-    vals.sort();
+    vals = list(vocabDict.keys())
+    vals.sort()
     fold_dict = {}
 
     fold1 = ['sil','cl','vcl','epi']
@@ -135,7 +133,7 @@ def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug = F
     fold6 = ['ih','ix']
     fold7 = ['ah','ax']
     folds = [fold1, fold2, fold3, fold4, fold5, fold6, fold7]
-    keyId = 7 
+    keyId = 7
     for key in vals:
         foldedKey = False
         for foldId,fold in enumerate(folds):
@@ -183,7 +181,7 @@ def load_batched_timit(batch_count, batch_count_val, batch_count_test, debug = F
                                                                    batch_size_test, maxTimeStepsTimit)
     test_data = (batched_data_test, max_time_steps_test, batch_size_test*batch_count, batch_size_test)
 
-    
+
     if debug == False:
         return training_data, validation_data, test_data
     else:
