@@ -249,7 +249,7 @@ with tf.Session(graph=graph) as session:
         if epoch > improvement_time:
             min_last_50 = min(epoch_error_lst_val[(epoch - improvement_time):epoch])
             min_since_start = min(epoch_error_lst_val[0:(epoch - improvement_time)])
-            if min_last_50 + 0.5 > (min_since_start):
+            if min_last_50 - 0.5 > (min_since_start):
                 continue_training = False
                 print("stopping the training.")
 
