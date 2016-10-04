@@ -33,9 +33,11 @@ from prepare_timit39 import load_batched_timit39
 
 
 ####Learning Parameters
+#LEARNING_RATE = 0.0008
 LEARNING_RATE = 0.001
 MOMENTUM = 0.9
-OMEGA = 0.1 #weight regularization term.
+#OMEGA = 0.1 #weight regularization term.
+#OMEGA = 0.05 #weight regularization term.
 INPUT_NOISE_STD = 0.6
 #LEARNING_RATE = 0.0001       #too low?
 #MOMENTUM = 0.6              #play with this.
@@ -46,7 +48,9 @@ BATCH_COUNT_TEST = 1
 
 ####Network Parameters
 n_features = 40
-n_hidden = 128
+#n_hidden = 164
+#n_hidden = 180
+n_hidden = 156
 n_classes = 40 #39 phonemes, plus the "blank" for CTC
 
 ####Load data
@@ -65,7 +69,7 @@ assert max_time_steps == max_time_steps_test
 #from IPython.core.debugger import Tracer
 #Tracer()()
 
-def create_dict(batched_data_arg):
+def create_dict(batched_data_arg, noise_bool):
     '''Create an input dictonary to be fed into the tree.
     @return:
     The dicitonary containing the input numpy arrays,
@@ -78,7 +82,8 @@ def create_dict(batched_data_arg):
                      target_ixs: batch_trgt_ixs,
                      target_vals: batch_trgt_vals,
                      target_shape: batch_trgt_shape,
-                     seq_lengths: batch_seq_lengths}
+                     seq_lengths: batch_seq_lengths,
+                     noise_wanted: noise_bool}
     return res_feed_dict, batch_seq_lengths
 
 def blstm(input_list_fun, weights_blstm_fun, biases_blstm_fun):
@@ -115,6 +120,8 @@ def blstm(input_list_fun, weights_blstm_fun, biases_blstm_fun):
 print('Defining graph')
 graph = tf.Graph()
 with graph.as_default():
+    #Variable wich determines if the graph is for training (it true add noise)
+    noise_wanted = tf.placeholder(tf.bool, shape=[], name='add_noise')
 
     #### Graph input shape=(max_time_steps, batch_size, n_features),  but the first two change.
     input_x = tf.placeholder(tf.float32, shape=(max_time_steps, None, n_features))
@@ -137,11 +144,21 @@ with graph.as_default():
     #                                               stddev=np.sqrt(2.0 / (2*n_hidden))))
     biases_blstm = tf.Variable(tf.zeros([n_classes]))
 
-    #### Network
-    noisy_inputs = [tf.random_normal(tf.shape(T), 0.0,
-                                     INPUT_NOISE_STD) + T for T in input_list]
-    logits = blstm(noisy_inputs, weights_blstm, biases_blstm)
+    #determine if noise is wanted in this tree.
+    def add_noise():
+        '''Operation used add noise during training'''
+        return [tf.random_normal(tf.shape(T), 0.0, INPUT_NOISE_STD)
+                + T for T in input_list]
+    def do_nothing():
+        '''Operation used to select noise free inputs during validation
+        and testing'''
+        return input_list
+    # tf cond applys the first operation if noise_wanted is true and
+    # does nothing it the variable is false.
+    blstm_input_list = tf.cond(noise_wanted, add_noise, do_nothing)
 
+    #### Network
+    logits = blstm(blstm_input_list, weights_blstm, biases_blstm)
     #### Optimizing
     # logits3d (max_time_steps, batch_size, n_classes), pack puts the list into a big matrix.
     #add the weight and bias l2 norms to the loss.
@@ -152,9 +169,9 @@ with graph.as_default():
 
     logits3d = tf.pack(logits)
     print("logits 3d shape:", tf.Tensor.get_shape(logits3d))
-    loss = tf.reduce_mean(ctc.ctc_loss(logits3d, target_y, seq_lengths)) + OMEGA*weight_loss
-    uncapped_optimizer = tf.train.MomentumOptimizer(LEARNING_RATE, MOMENTUM)#.minimize(loss)
-    #optimizer = tf.train.AdamOptimizer(LEARNING_RATE).minimize(loss)
+    loss = tf.reduce_mean(ctc.ctc_loss(logits3d, target_y, seq_lengths)) #+ OMEGA*weight_loss
+    #uncapped_optimizer = tf.train.MomentumOptimizer(LEARNING_RATE, MOMENTUM)#.minimize(loss)
+    uncapped_optimizer = tf.train.AdamOptimizer(LEARNING_RATE) #.minimize(loss)
 
     #gradient clipping:
     gvs = uncapped_optimizer.compute_gradients(loss)
@@ -187,11 +204,11 @@ with tf.Session(graph=graph) as session:
     tf.initialize_all_variables().run()
 
     #check untrained performance.
-    batch_loss = np.zeros(len(batched_data))
+    batch_losses = np.zeros(len(batched_data))
     batch_errors = np.zeros(len(batched_data))
     batch_rand_ixs = np.array(range(0, len(batched_data)))
     for batch, batchOrigI in enumerate(batch_rand_ixs):
-        feed_dict, batchSeqLengths = create_dict(batched_data[batchOrigI])
+        feed_dict, batchSeqLengths = create_dict(batched_data[batchOrigI], True)
         l, wl, er, lmt = session.run([loss, weight_loss,
                                       error_rate, logits_max_test],
                                      feed_dict=feed_dict)
@@ -201,13 +218,13 @@ with tf.Session(graph=graph) as session:
             print('Minibatch', batch, '/', batchOrigI, 'loss:', l, "weight loss:", wl)
             print('Minibatch', batch, '/', batchOrigI, 'error rate:', er)
         batch_errors[batch] = er*len(batchSeqLengths)
-        batch_loss[batch] = l*len(batchSeqLengths)
+        batch_losses[batch] = l
     epoch_error_rate = batch_errors.sum() / total
     epoch_error_lst.append(epoch_error_rate)
-    epoch_loss_lst.append(l.sum()/total)
+    epoch_loss_lst.append(batch_losses.sum()/BATCH_COUNT)
     print('Untrained error rate:', epoch_error_rate)
 
-    feed_dict, _ = create_dict(batched_data_val[0])
+    feed_dict, _ = create_dict(batched_data_val[0], False)
     vl, ver = session.run([loss, error_rate], feed_dict=feed_dict)
     print("untrained validation loss: ", vl, " validation error rate", ver)
     epoch_error_lst_val.append(ver)
@@ -215,12 +232,12 @@ with tf.Session(graph=graph) as session:
     continue_training = True
     while continue_training:
         epoch = len(epoch_error_lst_val)
-        print("params:", LEARNING_RATE, MOMENTUM, OMEGA, INPUT_NOISE_STD)
+        print("params:", LEARNING_RATE, MOMENTUM, INPUT_NOISE_STD) #OMEGA,
         print('Epoch', epoch, '...')
         batch_errors = np.zeros(len(batched_data))
         batch_rand_ixs = np.random.permutation(len(batched_data)) #randomize batch order
         for batch, batchOrigI in enumerate(batch_rand_ixs):
-            feed_dict, batchSeqLengths = create_dict(batched_data[batchOrigI])
+            feed_dict, batchSeqLengths = create_dict(batched_data[batchOrigI], True)
             _, l, wl, er, lmt = session.run([optimizer, loss, weight_loss,
                                              error_rate, logits_max_test],
                                             feed_dict=feed_dict)
@@ -232,13 +249,13 @@ with tf.Session(graph=graph) as session:
                 print('Minibatch', batch, '/', batchOrigI, 'loss:', l, "weight Loss", wl)
                 print('Minibatch', batch, '/', batchOrigI, 'error rate:', er)
             batch_errors[batch] = er*len(batchSeqLengths)
-            batch_loss[batch] = l*len(batchSeqLengths)
+            batch_losses[batch] = l
         epoch_error_rate = batch_errors.sum() / total
         epoch_error_lst.append(epoch_error_rate)
         epoch_loss_lst.append(l.sum()/total)
         print('Epoch', epoch, 'error rate:', epoch_error_rate)
         #compute the validation error
-        feed_dict, _ = create_dict(batched_data_val[0])
+        feed_dict, _ = create_dict(batched_data_val[0], False)
         vl, ver, vwl = session.run([loss, error_rate, weight_loss], feed_dict=feed_dict)
         print("vl: ", vl, " ver: ", "vwl: ", vwl)
         epoch_error_lst_val.append(ver)
@@ -257,16 +274,16 @@ with tf.Session(graph=graph) as session:
             continue_training = False
 
     #run the network on the test data set.
-    feed_dict, _ = create_dict(batched_data_test[0])
+    feed_dict, _ = create_dict(batched_data_test[0], False)
     tl, ter = session.run([loss, error_rate], feed_dict=feed_dict)
     print("test loss: ", tl, " test error rate", ter)
 
-filename = "saved/savedValsBLSTM." + socket.gethostname() + ".pkl"
+filename = "saved/savedValsBLSTMAdam." + socket.gethostname() + ".pkl"
 pickle.dump([epoch_loss_lst, epoch_error_lst,
              epoch_error_lst_val, ter], open(filename, "wb"))
 print("plot values saved at: " + filename)
 
-plt.plot(np.array(epoch_loss_lst)/100.0)
+plt.plot(np.array(epoch_loss_lst))
 plt.plot(np.array(epoch_error_lst))
 plt.plot(np.array(epoch_error_lst_val))
 plt.show()
