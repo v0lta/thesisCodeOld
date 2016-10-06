@@ -58,7 +58,7 @@ def data_lists_to_batches(inputList, targetList, batchSize, maxSteps=None):
             padSecs = maxSteps - inputList[origI].shape[1]
             batchInputs[:,batchI,:] = np.pad(normalizeInput(inputList[origI].T),
                                             ((0,padSecs),(0,0)),
-                                             'constant', constant_values=0)
+                                             'constant', constant_values = 0)
             batchTargetList.append(targetList[origI])
         dataBatches.append((batchInputs, target_list_to_sparse_tensor(batchTargetList),
                           batchSeqLengths))

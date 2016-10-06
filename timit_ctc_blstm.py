@@ -37,11 +37,11 @@ from prepare_timit39 import load_batched_timit39
 LEARNING_RATE = 0.001
 MOMENTUM = 0.9
 #OMEGA = 0.1 #weight regularization term.
-#OMEGA = 0.05 #weight regularization term.
-INPUT_NOISE_STD = 0.6
+OMEGA = 0.000 #weight regularization term.
+INPUT_NOISE_STD = 0.65
 #LEARNING_RATE = 0.0001       #too low?
 #MOMENTUM = 0.6              #play with this.
-MAX_N_EPOCHS = 1000
+MAX_N_EPOCHS = 900
 BATCH_COUNT = 8          #too small??
 BATCH_COUNT_VAL = 1
 BATCH_COUNT_TEST = 1
@@ -169,7 +169,7 @@ with graph.as_default():
 
     logits3d = tf.pack(logits)
     print("logits 3d shape:", tf.Tensor.get_shape(logits3d))
-    loss = tf.reduce_mean(ctc.ctc_loss(logits3d, target_y, seq_lengths)) #+ OMEGA*weight_loss
+    loss = tf.reduce_mean(ctc.ctc_loss(logits3d, target_y, seq_lengths)) + OMEGA*weight_loss
     #uncapped_optimizer = tf.train.MomentumOptimizer(LEARNING_RATE, MOMENTUM)#.minimize(loss)
     uncapped_optimizer = tf.train.AdamOptimizer(LEARNING_RATE) #.minimize(loss)
 
@@ -259,16 +259,23 @@ with tf.Session(graph=graph) as session:
         vl, ver, vwl = session.run([loss, error_rate, weight_loss], feed_dict=feed_dict)
         print("vl: ", vl, " ver: ", "vwl: ", vwl)
         epoch_error_lst_val.append(ver)
-        print("validation errors", epoch_error_lst_val)
 
-        #stop if in the last 50 epochs no progress has been made.
-        improvement_time = 100
-        if epoch > improvement_time:
-            min_last_50 = min(epoch_error_lst_val[(epoch - improvement_time):epoch])
-            min_since_start = min(epoch_error_lst_val[0:(epoch - improvement_time)])
-            if min_last_50 - 0.5 > (min_since_start):
+        # if the training error is lower than the validation error for
+        # interval iterations stop..
+        interval = 50
+        if epoch > interval:
+            print("validation errors", epoch_error_lst_val[(epoch - interval):epoch])
+
+            val_mean = np.mean(epoch_error_lst_val[(epoch - interval):epoch])
+            train_mean = np.mean(epoch_error_lst[(epoch - interval):epoch])
+            test_val = val_mean - train_mean - 0.02
+            print('Overfit condition value:', test_val)
+            if test_val > 0:
                 continue_training = False
                 print("stopping the training.")
+        else:
+            print("validation errors", epoch_error_lst_val)
+
 
         if epoch > MAX_N_EPOCHS:
             continue_training = False
@@ -280,7 +287,8 @@ with tf.Session(graph=graph) as session:
 
 filename = "saved/savedValsBLSTMAdam." + socket.gethostname() + ".pkl"
 pickle.dump([epoch_loss_lst, epoch_error_lst,
-             epoch_error_lst_val, ter], open(filename, "wb"))
+             epoch_error_lst_val, ter, LEARNING_RATE,
+             MOMENTUM, OMEGA, INPUT_NOISE_STD, n_hidden], open(filename, "wb"))
 print("plot values saved at: " + filename)
 
 plt.plot(np.array(epoch_loss_lst))

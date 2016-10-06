@@ -137,7 +137,7 @@ def load_batched_timit39(batch_count, batch_count_val, batch_count_test, debug =
 
     maxTimeStepsTimit = 777
     #set up the training data
-    input_list_train, target_list_train, batch_size = setUpBatchLists(train_reader, 
+    input_list_train, target_list_train, batch_size = setUpBatchLists(train_reader,
                                 train_phone_dict, phone_map, batch_count)
 
     batched_data, max_time_steps = data_lists_to_batches(input_list_train, target_list_train,
